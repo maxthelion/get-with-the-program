@@ -1,3 +1,9 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Arial', sans-serif;
+}
 #bigholder {
     display: grid;
     grid-template-columns: 90vh 1fr;
@@ -26,6 +32,9 @@
     height: 100%;
     width: 100%;
 }
+.minimapui .bank.currentBank .currentBankHalf{
+    border-color: white !important;
+}
 .minimapui .bankHalf {
     display: grid;
     grid-template-columns: repeat(8, 1fr);
@@ -34,6 +43,16 @@
     width: 100%;
     border: 1px solid black;
 }
+.minimapui .bankHalf .cell {
+    font-size: 10px;
+    text-align: center;
+    vertical-align: middle;
+}
+.minimapui .bankHalf .cell.highlight {
+    color:aliceblue;
+    
+}
+
 #interface-holder {
     display: grid;
     /* 9 columns */
@@ -74,6 +93,9 @@
 #grid .cell {
     background: pink;
     border: 1px solid black;
+    font-size: 30px;
+    text-align: center;
+    vertical-align: middle;
 }
 
 .cell.highlight {
