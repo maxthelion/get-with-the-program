@@ -1,0 +1,81 @@
+#bigholder {
+    display: grid;
+    grid-template-columns: 90vh 1fr;
+    grid-template-rows: 90vh;
+    height: 90vh;
+    width: 100vw;
+}
+#minimap {
+    display: grid;
+
+    background: grey;
+    height: 100%;
+    width: 100%;
+}
+.minimapui {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(8, 1fr);
+    height: 100%;
+    width: 100%;
+}
+.minimapui .bank {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: 1fr;
+    height: 100%;
+    width: 100%;
+}
+.minimapui .bankHalf {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    height: 100%;
+    width: 100%;
+    border: 1px solid black;
+}
+#interface-holder {
+    display: grid;
+    /* 9 columns */
+    grid-template-columns: repeat(9, 1fr);
+    /* 9 rows */ 
+    grid-template-rows: repeat(9, 1fr);
+    height: 90vh;
+    width : 90vh;
+}
+#toprow {
+    display: grid;
+    grid-column: 1 / 10;
+    grid-row: 1 / 2;
+    background: blue;
+}
+#grid {
+    display: grid;
+    grid-column: 1 / 9;
+    grid-row: 2 / 10;
+    background: yellow;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+}
+#grid .grid {
+    display: grid;
+    grid-column: 1 / 9;
+    grid-row: 1 / 9;
+    grid-template-columns: inherit;
+    grid-template-rows: inherit;
+}
+
+#sidecol {
+    grid-column: 9 / 10;
+    grid-row: 2 / 10;
+    background: red;
+}
+
+#grid .cell {
+    background: pink;
+    border: 1px solid black;
+}
+
+.cell.highlight {
+    background: green !important;
+}
