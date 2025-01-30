@@ -11,21 +11,18 @@ export default class Launchpad {
         for (let y=0; y<10; y++) {
             this.cellMatrix[y] = [];
             for (let x=0; x<10; x++) {
-                let cell = new LaunchpadCell(x, y);
+                let cell = new LaunchpadCell(this, x, y);
                 this.cellMatrix[y][x] = cell;
                 this.cells.push(cell);
                 this.cellsByNote[cell.note] = cell;
             }
         }
         this.wipe();
-        // if (this.midiInput.onmidimessage !== undefined) {
-            let oldMidiCallback = this.midiInput.onmidimessage;
-        // }
-        midiInput.onmidimessage = (event) => {
-            this.handleMidiInput(event.data!);
-            oldMidiCallback(event);
-        };
-        console.log(this.cellMatrix);
+
+        midiInput.addEventListener('midimessage', (event) => {
+            this.handleMidiInput(event.data);
+        });
+        // console.log(this.cellMatrix);
     }
 
     wipe() {
@@ -73,7 +70,7 @@ export default class Launchpad {
         let cells = [];
         for (let i=0; i<width; i++) {
             for (let j=0; j<height; j++) {
-                console.log("adding cell", col + i, row + j);
+                // console.log("adding cell", col + i, row + j);
                 cells.push(this.getCell(col + i, row + j));
             }
         }
@@ -90,7 +87,7 @@ export class LaunchPadCellGroup {
         this.cells = cells;
     }
 
-    addEventListener(event: string, callback: () => void) {
+    addEventListener(event: string, callback: (cell: LaunchpadCell) => void) {
         this.cells.forEach(cell => cell.addEventListener(event, callback));
     }
 
@@ -100,30 +97,39 @@ export class LaunchPadCellGroup {
 }
 
 class LaunchpadCell {
-    callbacks: { [event: string]: (() => void)[] } = {};
+    callbacks: { [event: string]: ((cell: LaunchpadCell) => void)[] } = {};
     note: number;
     col: number;
     row: number;
-    
-    constructor(col: number, row: number) {
+    parent: Launchpad;
+
+    constructor(parent: Launchpad, col: number, row: number) {
         // console.log('creating cell', col, row);
         this.col = col;
         this.row = row;
         this.note = (col + 1) + ((9 - row) * 10);
+        this.parent = parent;
     }
 
-    addEventListener(event: string, callback: () => void) {
+    addEventListener(event: string, callback: (cell: LaunchpadCell) => void) {
         // add an array of callbacks for the event if it doet not exist    
         if (!this.callbacks[event]) {
             this.callbacks[event] = [];
         }
-        this.callbacks[event].push(callback);
+        this.callbacks[event].push(callback.bind(this));
     }
 
     executeCallbacks(event: string) {
         let cell = this;
         if (this.callbacks[event]) {
-            this.callbacks[event].forEach(callback => callback());
+            // execute all callbacks for the event with the context of the cell
+            for (let i=0; i<this.callbacks[event].length; i++) {
+                this.callbacks[event][i].bind(cell)(cell);
+            }
         }
+    }
+
+    paint(color: number) {
+        this.parent.paintCell(this.col, this.row, color);
     }
 }

@@ -39,26 +39,32 @@ document.addEventListener('DOMContentLoaded', () => {
         let cell = launchPad.getCell(7, 0);
         cell.addEventListener('click', (() => {
             console.log('randomize', cell);
-            let cellIndex = getRandomCellIndex();
-            console.log('random cell', cellIndex, cellIndexToMidiNote(cellIndex));
-            highlightCell(cellIndexToMidiNote(cellIndex));
+            // let cellIndex = getRandomCellIndex();
+            // console.log('random cell', cellIndex, cellIndexToMidiNote(cellIndex));
+            // highlightCell(cellIndexToMidiNote(cellIndex));
         }).bind(cell));
-        console.log('randomize cell', cell);
-
         launchPad.paintCell(cell.col, cell.row, 37);
+
         let rightControls = launchPad.getCellGroup(8, 1, 1, 4);
         rightControls.paint(13);
         rightControls.addEventListener('click', () => {
             console.log('right controls clicked');
         });
-        let topControls = launchPad.getCellGroup(0, 0, 4, 1);
 
+        let topControls = launchPad.getCellGroup(0, 0, 4, 1);
         topControls.paint(21);
         topControls.addEventListener('click', () => {
             console.log('top controls clicked');
         });
+        
         mainCellMatrix = launchPad.getCellGroup(0, 1, 8, 8);
         mainCellMatrix.paint(29);
+        mainCellMatrix.addEventListener('click',  function(cell){
+            console.log('main cell matrix clicked', this, cell);
+            changeProgram(cell.note);
+            repaint();
+            cell.paint(37);
+        });
 
         launchPad.paintCell(3, 4, 37);
     });
@@ -98,21 +104,6 @@ function highlightCell(note: number) {
     appState.highlightedCell = note;
     appState.currentAbsoluteCell = absoluteCellIndexFromGridIndex(gridIndexFromNote(note));
     repaint();
-}
-
-function handleMidiInput(data: Uint8Array) {
-    // console.log(data);
-    let status = data[0];
-    if (status === 0x90 && data[2] > 0) {
-        let note = data[1];
-        let velocity = data[2];
-        let color = Math.floor(Math.random() * 127);
-        //console.log('Note on', note, velocity);
-        highlightCell(note);
-        changeProgram(note);
-    } else if (status === 176) {
-        handleCCinput(data);
-    }
 }
 
 function changeProgram(note: number) {
