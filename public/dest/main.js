@@ -23,6 +23,7 @@ var midiAccess;
 var midiOutput;
 var midiOutput2;
 var launchPad;
+var mainCellMatrix;
 document.addEventListener('DOMContentLoaded', () => {
     let grid = new Grid(appState);
     let minimap = new Minimap(appState);
@@ -32,19 +33,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 1000 / 30);
     setUpMidi(() => {
         launchPad = new Launchpad(midiInput, midiOutput);
-        launchPad.cells.forEach((cell) => {
-            cell.addEventListener('click', () => {
-                console.log('cell clicked', cell.note);
-            });
-        });
-        let cell = launchPad.getCell(0, 7);
-        console.log('cell', cell);
+        let cell = launchPad.getCell(7, 0);
         cell.addEventListener('click', (() => {
             console.log('randomize', cell);
             let cellIndex = getRandomCellIndex();
             console.log('random cell', cellIndex, cellIndexToMidiNote(cellIndex));
             highlightCell(cellIndexToMidiNote(cellIndex));
         }).bind(cell));
+        console.log('randomize cell', cell);
+        launchPad.paintCell(cell.col, cell.row, 37);
+        let rightControls = launchPad.getCellGroup(8, 1, 1, 4);
+        rightControls.paint(13);
+        rightControls.addEventListener('click', () => {
+            console.log('right controls clicked');
+        });
+        let topControls = launchPad.getCellGroup(0, 0, 4, 1);
+        topControls.paint(21);
+        topControls.addEventListener('click', () => {
+            console.log('top controls clicked');
+        });
+        mainCellMatrix = launchPad.getCellGroup(0, 1, 8, 8);
+        mainCellMatrix.paint(29);
+        launchPad.paintCell(3, 4, 37);
     });
     document.getElementById('grid').appendChild(grid.element);
     document.getElementById('minimap').appendChild(minimap.element);
@@ -53,28 +63,15 @@ function repaint() {
     let color = appState.bankColors[appState.currentBank][0];
     let offset = (appState.currentBank * 128) + (appState.currentBankHalf * 64);
     let highlightColor = 3;
-    for (let i = 0; i < 64; i++) {
-        let channel = 0;
-        let status = 0x90 + channel;
-        let row = Math.floor(i / 8) + 1;
-        let col = i % 8 + 1;
-        let cellIndex = row * 10 + col;
-        let absolute = absoluteCellIndexFromGridIndex(gridIndexFromNote(cellIndex));
-        if (absolute === appState.currentAbsoluteCell) {
-            midiOutput.send([status, cellIndex, highlightColor]);
-        }
-        else {
-            midiOutput.send([status, cellIndex, color]);
-        }
-    }
+    mainCellMatrix.paint(color);
 }
 function getRandomCellIndex() {
     return Math.floor(Math.random() * 64) + 1;
 }
 function cellIndexToMidiNote(cellIndex) {
-    let row = Math.floor(cellIndex / 10);
+    let row = Math.floor(cellIndex / 9);
     let col = cellIndex % 10;
-    return (8 - row) * 10 + col;
+    return (10 - row) * 10 + col;
 }
 function gridIndexFromNote(midiNote) {
     let row = 8 - Math.floor(midiNote / 10);
@@ -99,7 +96,7 @@ function handleMidiInput(data) {
         let color = Math.floor(Math.random() * 127);
         //console.log('Note on', note, velocity);
         highlightCell(note);
-        // changeProgram(note);
+        changeProgram(note);
     }
     else if (status === 176) {
         handleCCinput(data);
@@ -154,8 +151,6 @@ function handleCCinput(data) {
                 shiftBankHalf();
                 break;
         }
-        let color = 5;
-        midiOutput.send([status, data1, color]);
     }
 }
 function setUpMidi(callback) {
@@ -169,7 +164,7 @@ function setUpMidi(callback) {
             }
         }
         for (let out of midiAccess.outputs.values()) {
-            console.log("found output", out);
+            console.log("found output", out.name, out.id);
         }
         // macmini
         //Launchpad Mini MK3 LPMiniMK3 DAW In 289006756
@@ -181,7 +176,7 @@ function setUpMidi(callback) {
         console.log('inputId', controllerInputId);
         // let inputId2 = "1823086654"
         let controllerOutputId = "900833936";
-        let programChangeOutputId = "1434885207";
+        let programChangeOutputId = "-314509236";
         midiOutput = midiAccess.outputs.get(controllerOutputId);
         midiOutput2 = midiAccess.outputs.get(programChangeOutputId);
         midiInput = midiAccess.inputs.get(controllerInputId);
@@ -198,7 +193,6 @@ function setUpMidi(callback) {
             console.log('No MIDI input devices present.');
         }
         if (midiOutput) {
-            repaint();
         }
         else {
             console.log('No MIDI output devices present.', midiOutput);
