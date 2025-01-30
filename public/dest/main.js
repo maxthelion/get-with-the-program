@@ -1,4 +1,5 @@
 import Grid from './grid.js';
+import Launchpad from './launchpad.js';
 import Minimap from './minimap.js';
 var appState = {
     currentBank: 0,
@@ -17,6 +18,11 @@ var appState = {
         [61, "orange"],
     ]
 };
+var midiInput;
+var midiAccess;
+var midiOutput;
+var midiOutput2;
+var launchPad;
 document.addEventListener('DOMContentLoaded', () => {
     let grid = new Grid(appState);
     let minimap = new Minimap(appState);
@@ -24,6 +30,22 @@ document.addEventListener('DOMContentLoaded', () => {
         grid.render();
         minimap.render();
     }, 1000 / 30);
+    setUpMidi(() => {
+        launchPad = new Launchpad(midiInput, midiOutput);
+        launchPad.cells.forEach((cell) => {
+            cell.addEventListener('click', () => {
+                console.log('cell clicked', cell.note);
+            });
+        });
+        let cell = launchPad.getCell(0, 7);
+        console.log('cell', cell);
+        cell.addEventListener('click', (() => {
+            console.log('randomize', cell);
+            let cellIndex = getRandomCellIndex();
+            console.log('random cell', cellIndex, cellIndexToMidiNote(cellIndex));
+            highlightCell(cellIndexToMidiNote(cellIndex));
+        }).bind(cell));
+    });
     document.getElementById('grid').appendChild(grid.element);
     document.getElementById('minimap').appendChild(minimap.element);
 });
@@ -46,6 +68,14 @@ function repaint() {
         }
     }
 }
+function getRandomCellIndex() {
+    return Math.floor(Math.random() * 64) + 1;
+}
+function cellIndexToMidiNote(cellIndex) {
+    let row = Math.floor(cellIndex / 10);
+    let col = cellIndex % 10;
+    return (8 - row) * 10 + col;
+}
 function gridIndexFromNote(midiNote) {
     let row = 8 - Math.floor(midiNote / 10);
     let col = midiNote % 10 - 1;
@@ -55,12 +85,13 @@ function absoluteCellIndexFromGridIndex(gridIndex) {
     let offset = (appState.currentBank * 128) + (appState.currentBankHalf * 64);
     return offset + gridIndex;
 }
-function highlightCell(index) {
-    appState.highlightedCell = index;
-    appState.currentAbsoluteCell = absoluteCellIndexFromGridIndex(gridIndexFromNote(index));
+function highlightCell(note) {
+    appState.highlightedCell = note;
+    appState.currentAbsoluteCell = absoluteCellIndexFromGridIndex(gridIndexFromNote(note));
     repaint();
 }
 function handleMidiInput(data) {
+    // console.log(data);
     let status = data[0];
     if (status === 0x90 && data[2] > 0) {
         let note = data[1];
@@ -68,7 +99,7 @@ function handleMidiInput(data) {
         let color = Math.floor(Math.random() * 127);
         //console.log('Note on', note, velocity);
         highlightCell(note);
-        changeProgram(note);
+        // changeProgram(note);
     }
     else if (status === 176) {
         handleCCinput(data);
@@ -127,12 +158,7 @@ function handleCCinput(data) {
         midiOutput.send([status, data1, color]);
     }
 }
-var midiInput;
-var midiInput2;
-var midiAccess;
-var midiOutput;
-var midiOutput2;
-document.addEventListener('DOMContentLoaded', () => {
+function setUpMidi(callback) {
     navigator.requestMIDIAccess().then((access) => {
         var _a;
         midiAccess = access;
@@ -177,5 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else {
             console.log('No MIDI output devices present.', midiOutput);
         }
+        callback();
     });
-});
+}
+;
