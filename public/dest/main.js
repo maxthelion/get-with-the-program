@@ -75,15 +75,17 @@ function handleMidiInput(data) {
     }
 }
 function changeProgram(note) {
-    let programNumber = gridIndexFromNote(note);
+    let programNumber = gridIndexFromNote(note) + (appState.currentBankHalf * 64);
+    let bank = appState.currentBank;
+    console.log('change program', programNumber);
     let output = midiOutput2;
     // use MSB and LSB to set program
     // 0-63 is bank 0, 64-127 is bank 1
-    const channel = 0; // MIDI Channel 1 (0-based)
+    const channel = 11; // MIDI Channel 1 (0-based)
     // Bank Select MSB (Control Change #0)
-    output.send([0xB0 | channel, 0x00, 2]); // MSB = 2
+    output.send([0xB0 | channel, 0x00, bank]); // MSB = 2
     // Bank Select LSB (Control Change #32)
-    output.send([0xB0 | channel, 0x20, 3]); // LSB = 3
+    output.send([0xB0 | channel, 0x20, bank]); // LSB = 3
     // Program Change
     output.send([0xC0 | channel, programNumber]); // Program = 5
 }
@@ -132,21 +134,32 @@ var midiOutput;
 var midiOutput2;
 document.addEventListener('DOMContentLoaded', () => {
     navigator.requestMIDIAccess().then((access) => {
+        var _a;
         midiAccess = access;
         // list all the inputs
         for (let input of midiAccess.inputs.values()) {
-            console.log(input.name, input.id);
+            if (((_a = input.name) === null || _a === void 0 ? void 0 : _a.indexOf("Launchpad Mini")) > -1) {
+                console.log('found input', input);
+            }
         }
         for (let out of midiAccess.outputs.values()) {
-            console.log(out.name, out.id);
+            console.log("found output", out);
         }
-        let inputId = "909199967";
-        let inputId2 = "1823086654";
-        let outputId = "1738695624";
-        let outputId2 = "-267828544";
-        midiOutput = midiAccess.outputs.get(outputId);
-        midiOutput2 = midiAccess.outputs.get(outputId2);
-        midiInput = midiAccess.inputs.get(inputId);
+        // macmini
+        //Launchpad Mini MK3 LPMiniMK3 DAW In 289006756
+        //Launchpad Mini MK3 LPMiniMK3 MIDI In 900833936
+        // laptop
+        // let inputId = "909199967"
+        // macmini
+        let controllerInputId = "-823483040";
+        console.log('inputId', controllerInputId);
+        // let inputId2 = "1823086654"
+        let controllerOutputId = "900833936";
+        let programChangeOutputId = "1434885207";
+        midiOutput = midiAccess.outputs.get(controllerOutputId);
+        midiOutput2 = midiAccess.outputs.get(programChangeOutputId);
+        midiInput = midiAccess.inputs.get(controllerInputId);
+        console.log('programChangeOut', midiOutput2);
         if (midiInput) {
             console.log('Connected to input', midiInput.name);
             midiInput.onmidimessage = (event) => {
