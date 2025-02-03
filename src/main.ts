@@ -9,6 +9,7 @@ var appState: AppState = {
     currentAbsoluteCell: 0,
     currentBankHalf: 0,
     backgroundColor: 0,
+    midiOutputChannel: 11,
     bankColors: [
         [5, "red"],
         [13, "yellow"],
@@ -27,7 +28,6 @@ var midiOutput: MIDIOutput;
 var midiOutput2: MIDIOutput;
 var launchPad: Launchpad;
 var mainCellMatrix: LaunchPadCellGroup;
-var controlledChannel = 0;
 
 document.addEventListener('DOMContentLoaded', () => {
     let grid = new Grid(appState);
@@ -44,14 +44,17 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             console.log('launchpad initialized', layer);
-            // let cell = launchPad.getCell(7, 0);
-            // cell.addEventListener('click', (() => {
-            //     console.log('randomize', cell);
-            //     // let cellIndex = getRandomCellIndex();
-            //     // console.log('random cell', cellIndex, cellIndexToMidiNote(cellIndex));
-            //     // highlightCell(cellIndexToMidiNote(cellIndex));
-            // }).bind(cell));
-            // launchPad.paintCell(cell.col, cell.row, 37);
+            let cell = layer.getCell(7, 0);
+            cell.addEventListener('click', (() => {
+                console.log('randomize', cell);
+                let cellIndex = getRandomCellIndex();
+                let newCell = mainCellMatrix.cellAtIndex(cellIndex);
+                changeProgram(newCell.note);
+                highlightCell(newCell.note);
+                repaint();
+                newCell.paint(37);
+            }));
+            cell.paint(37);
 
             let rightControls = layer.createCellGroup(8, 1, 1, 4);
             rightControls.paint(21);
@@ -71,10 +74,12 @@ document.addEventListener('DOMContentLoaded', () => {
             topControls.cells[3].addEventListener('click', () => { shiftBankHalf(); });
             
             mainCellMatrix = layer.createCellGroup(0, 1, 8, 8);
-            mainCellMatrix.paint(29);
+            mainCellMatrix.paint(appState.bankColors[appState.currentBank][0]);
+        
             mainCellMatrix.addEventListener('click',  function(cell){
                 // console.log('main cell matrix clicked', this, cell);
                 changeProgram(cell.note);
+                highlightCell(cell.note);
                 repaint();
                 cell.paint(37);
             });
@@ -95,23 +100,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let channelCellMatrix = layer.createCellGroup(0, 1, 8, 2);
             channelCellMatrix.paint(45, 0);
-            channelCellMatrix.cellAtIndex(controlledChannel).paint(5, 2);
+            channelCellMatrix.cellAtIndex(appState.midiOutputChannel).paint(5, 2);
 
             channelCellMatrix.addEventListener('click', function(cell, index) {
                 console.log('channel cell matrix clicked', cell, index);
-                controlledChannel = index;
+                appState.midiOutputChannel = index;
                 channelCellMatrix.paint(45, 0);
-                console.log('controlled channel', controlledChannel);
-                channelCellMatrix.cellAtIndex(controlledChannel).paint(5, 2);
-                launchPad.setLayer(0);
+                channelCellMatrix.cellAtIndex(index).paint(5, 2);
+
+                setTimeout(() => {
+                    launchPad.setLayer(0);
+                }, 500);
             });
 
             let channelSelectButton = layer.getCell(4, 0);
             channelSelectButton.paint(45, 2);
             channelSelectButton.addEventListener('click', () => {
                 console.log('channel select clicked');
-
-                launchPad.setLayer(0);
+                setTimeout(() => {
+                    launchPad.setLayer(0);
+                }, 500);
             });
 
 
@@ -165,7 +173,7 @@ function changeProgram(note: number) {
     let output = midiOutput2;
     // use MSB and LSB to set program
     // 0-63 is bank 0, 64-127 is bank 1
-    const channel = 11; // MIDI Channel 1 (0-based)
+    const channel = appState.midiOutputChannel; // MIDI Channel 1 (0-based)
 
     // Bank Select MSB (Control Change #0)
     output.send([0xB0 | channel, 0x00, bank]); // MSB = 2
@@ -205,9 +213,9 @@ function setUpMidi(callback: () => void) {
         midiAccess = access;
         // list all the inputs
         for (let input of midiAccess.inputs.values()) {
-            if (input.name?.indexOf("Launchpad Mini") > -1) {
-                console.log('found input', input);
-            }
+            // if (input.name?.indexOf("Launchpad Mini") > -1) {
+            //     console.log('found input', input);
+            // }
         }
         for (let out of midiAccess.outputs.values()) {
             console.log("found output", out.name, out.id);

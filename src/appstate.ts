@@ -5,4 +5,6 @@ export type AppState = {
     currentBankHalf: number;
     backgroundColor: number;
     bankColors: [number, string][];
+    midiOutputChannel: number;
+
 }
