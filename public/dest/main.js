@@ -24,6 +24,7 @@ var midiOutput;
 var midiOutput2;
 var launchPad;
 var mainCellMatrix;
+var controlledChannel = 0;
 document.addEventListener('DOMContentLoaded', () => {
     let grid = new Grid(appState);
     let minimap = new Minimap(appState);
@@ -33,33 +34,72 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 1000 / 30);
     setUpMidi(() => {
         launchPad = new Launchpad(midiInput, midiOutput);
-        let cell = launchPad.getCell(7, 0);
-        cell.addEventListener('click', (() => {
-            console.log('randomize', cell);
-            // let cellIndex = getRandomCellIndex();
-            // console.log('random cell', cellIndex, cellIndexToMidiNote(cellIndex));
-            // highlightCell(cellIndexToMidiNote(cellIndex));
-        }).bind(cell));
-        launchPad.paintCell(cell.col, cell.row, 37);
-        let rightControls = launchPad.getCellGroup(8, 1, 1, 4);
-        rightControls.paint(13);
-        rightControls.addEventListener('click', () => {
-            console.log('right controls clicked');
+        launchPad.createLayer((layer) => {
+            if (!layer) {
+                throw new Error('layer not initialized');
+            }
+            console.log('launchpad initialized', layer);
+            // let cell = launchPad.getCell(7, 0);
+            // cell.addEventListener('click', (() => {
+            //     console.log('randomize', cell);
+            //     // let cellIndex = getRandomCellIndex();
+            //     // console.log('random cell', cellIndex, cellIndexToMidiNote(cellIndex));
+            //     // highlightCell(cellIndexToMidiNote(cellIndex));
+            // }).bind(cell));
+            // launchPad.paintCell(cell.col, cell.row, 37);
+            let rightControls = layer.createCellGroup(8, 1, 1, 4);
+            rightControls.paint(21);
+            rightControls.addEventListener('click', () => {
+                console.log('right controls clicked');
+            });
+            let topControls = layer.createCellGroup(0, 0, 4, 1);
+            topControls.paint(21);
+            // topControls.addEventListener('click', () => {
+            //     console.log('top controls clicked');
+            // });
+            topControls.cells[0].addEventListener('click', () => { moveBank(-1); });
+            topControls.cells[1].addEventListener('click', () => { moveBank(1); });
+            topControls.cells[2].addEventListener('click', () => { shiftBankHalf(); });
+            topControls.cells[3].addEventListener('click', () => { shiftBankHalf(); });
+            mainCellMatrix = layer.createCellGroup(0, 1, 8, 8);
+            mainCellMatrix.paint(29);
+            mainCellMatrix.addEventListener('click', function (cell) {
+                // console.log('main cell matrix clicked', this, cell);
+                changeProgram(cell.note);
+                repaint();
+                cell.paint(37);
+            });
+            let channelSelectButton = layer.getCell(4, 0);
+            channelSelectButton.paint(45);
+            channelSelectButton.addEventListener('click', () => {
+                console.log('channel select clicked');
+                launchPad.setLayer(1);
+            });
         });
-        let topControls = launchPad.getCellGroup(0, 0, 4, 1);
-        topControls.paint(21);
-        topControls.addEventListener('click', () => {
-            console.log('top controls clicked');
+        // channel select layer
+        launchPad.createLayer((layer) => {
+            if (!layer) {
+                throw new Error('layer not initialized');
+            }
+            let channelCellMatrix = layer.createCellGroup(0, 1, 8, 2);
+            channelCellMatrix.paint(45, 0);
+            channelCellMatrix.cellAtIndex(controlledChannel).paint(5, 2);
+            channelCellMatrix.addEventListener('click', function (cell, index) {
+                console.log('channel cell matrix clicked', cell, index);
+                controlledChannel = index;
+                channelCellMatrix.paint(45, 0);
+                console.log('controlled channel', controlledChannel);
+                channelCellMatrix.cellAtIndex(controlledChannel).paint(5, 2);
+                launchPad.setLayer(0);
+            });
+            let channelSelectButton = layer.getCell(4, 0);
+            channelSelectButton.paint(45, 2);
+            channelSelectButton.addEventListener('click', () => {
+                console.log('channel select clicked');
+                launchPad.setLayer(0);
+            });
         });
-        mainCellMatrix = launchPad.getCellGroup(0, 1, 8, 8);
-        mainCellMatrix.paint(29);
-        mainCellMatrix.addEventListener('click', function (cell) {
-            console.log('main cell matrix clicked', this, cell);
-            changeProgram(cell.note);
-            repaint();
-            cell.paint(37);
-        });
-        launchPad.paintCell(3, 4, 37);
+        launchPad.setLayer(0);
     });
     document.getElementById('grid').appendChild(grid.element);
     document.getElementById('minimap').appendChild(minimap.element);
@@ -122,27 +162,6 @@ function shiftBankHalf() {
     repaint();
     console.log('shift bank half', appState.currentBankHalf);
 }
-function handleCCinput(data) {
-    if (data[2] === 127) {
-        let channel = 0;
-        let status = 0x90 + channel;
-        let data1 = data[1];
-        switch (data1) {
-            case 91:
-                moveBank(-1);
-                break;
-            case 92:
-                moveBank(1);
-                break;
-            case 93:
-                shiftBankHalf();
-                break;
-            case 94:
-                shiftBankHalf();
-                break;
-        }
-    }
-}
 function setUpMidi(callback) {
     navigator.requestMIDIAccess().then((access) => {
         var _a;
@@ -173,10 +192,6 @@ function setUpMidi(callback) {
         console.log('programChangeOut', midiOutput2);
         if (midiInput) {
             console.log('Connected to input', midiInput.name);
-            midiInput.onmidimessage = (event) => {
-                // console.log(event.data);
-                handleMidiInput(event.data);
-            };
         }
         else {
             console.log(midiAccess.inputs, midiInput);

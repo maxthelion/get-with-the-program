@@ -1,82 +1,144 @@
 export default class Launchpad {
     constructor(midiInput, midiOutput) {
-        this.cells = [];
-        this.cellsByNote = {};
-        this.cellMatrix = [];
         this.midiInput = midiInput;
         this.midiOutput = midiOutput;
+        midiInput.addEventListener('midimessage', (event) => {
+            this.handleMidiInput(event.data);
+        });
+        this.layers = [];
+        this.currentLayerIndex = 0;
+    }
+    setLayer(index) {
+        this.currentLayerIndex = index;
+        let newLayer = this.layers[index];
+        if (newLayer) {
+            //newLayer.wipe();
+            newLayer.onChange();
+        }
+    }
+    createLayer(layerInit) {
+        let layer = new LaunchPadLayer(this);
+        layerInit(layer);
+        this.layers.push(layer);
+    }
+    getCell(col, row) {
+        return this.currentLayer().cellMatrix[row][col];
+    }
+    currentLayer() {
+        return this.layers[this.currentLayerIndex];
+    }
+    handleMidiInput(data) {
+        let status = data[0];
+        if ((status === 0x90 || status === 176) && data[2] > 0) {
+            let note = data[1];
+            let cellCoords = this.getCellFromNote(note);
+            this.onCellClick(cellCoords);
+        }
+    }
+    onCellClick(cellCoords) {
+        let currentLayer = this.layers[this.currentLayerIndex];
+        if (currentLayer) {
+            currentLayer.onCellClick(cellCoords);
+        }
+    }
+    getCellFromNote(note) {
+        let row = 9 - Math.floor(note / 10);
+        let col = note % 10 - 1;
+        return { col: col, row: row };
+    }
+    paintCell(cell, color, mode = 0) {
+        let channel = mode;
+        let status = 0x90 + channel;
+        let cellIndex = cell.note;
+        this.midiOutput.send([status, cellIndex, color]);
+    }
+}
+export class LaunchPadLayer {
+    constructor(launchPad) {
+        this.launchPad = launchPad;
+        this.cellMatrix = [];
+        this.cellGroups = [];
         for (let y = 0; y < 10; y++) {
             this.cellMatrix[y] = [];
             for (let x = 0; x < 10; x++) {
                 let cell = new LaunchpadCell(this, x, y);
                 this.cellMatrix[y][x] = cell;
-                this.cells.push(cell);
-                this.cellsByNote[cell.note] = cell;
             }
         }
-        this.wipe();
-        midiInput.addEventListener('midimessage', (event) => {
-            this.handleMidiInput(event.data);
-        });
-        // console.log(this.cellMatrix);
     }
-    wipe() {
-        this.cells.forEach(cell => this.paintCell(cell.col, cell.row, 0));
+    createCellGroup(col, row, width, height) {
+        let cells = [];
+        for (let j = 0; j < height; j++) {
+            for (let i = 0; i < width; i++) {
+                cells.push(this.getCell(col + i, row + j));
+            }
+        }
+        let cellGroup = new LaunchPadCellGroup(this.launchPad, cells, col, row, width, height);
+        this.cellGroups.push(cellGroup);
+        return cellGroup;
+    }
+    // createCell(col: number, row: number) {
+    //     let cell = this.launchPad.getCell(col, row);
+    //     this.cells.push(cell);
+    //     return cell;
+    // }
+    onChange() {
+        this.wipe();
+        // iterate over the cells and paint them if they have a color
+        this.cellMatrix.forEach(row => row.forEach(cell => {
+            if (cell.color !== undefined) {
+                this.launchPad.paintCell(cell, cell.color, cell.mode);
+            }
+        }));
+    }
+    onCellClick(cellCoords) {
+        console.log('cell clicked', cellCoords);
+        // // find cellgroups that contain the cell
+        let cellGroups = this.cellGroups.filter(cellGroup => {
+            return cellCoords.col >= cellGroup.col && cellCoords.col < cellGroup.col + cellGroup.width &&
+                cellCoords.row >= cellGroup.row && cellCoords.row < cellGroup.row + cellGroup.height;
+        });
+        // // execute the click callback for each cellgroup with the index of the cell in the group
+        cellGroups.forEach(cellGroup => {
+            let index = (cellCoords.col - cellGroup.col) + (cellCoords.row - cellGroup.row) * cellGroup.width;
+            cellGroup.executeCallbacks('click', index);
+        });
+        // // execute the click callback
+        let cell = this.getCell(cellCoords.col, cellCoords.row);
+        cell.executeCallbacks('click');
     }
     getCell(col, row) {
         return this.cellMatrix[row][col];
     }
-    handleMidiInput(data) {
-        let status = data[0];
-        if (status === 0x90 && data[2] > 0) {
-            let note = data[1];
-            //highlightCell(note);
-            let cell = this.getCellFromNote(note);
-            cell.executeCallbacks('click');
-        }
-        else if (status === 176 && data[2] > 0) {
-            let note = data[1];
-            //handleCCinput(data);
-            let cell = this.getCellFromNote(note);
-            cell.executeCallbacks('click');
-        }
-    }
-    getCellFromNote(note) {
-        return this.cellsByNote[note];
-    }
-    gridIndexFromNote(midiNote) {
-        let row = 8 - Math.floor(midiNote / 10);
-        let col = midiNote % 10 - 1;
-        return row * 8 + col;
-    }
-    paintCell(col, row, color) {
-        let cell = this.getCell(col, row);
-        let channel = 0;
-        let status = 0x90 + channel;
-        let cellIndex = cell.note;
-        this.midiOutput.send([status, cellIndex, color]);
-    }
-    getCellGroup(col, row, width, height) {
-        let cells = [];
-        for (let i = 0; i < width; i++) {
-            for (let j = 0; j < height; j++) {
-                // console.log("adding cell", col + i, row + j);
-                cells.push(this.getCell(col + i, row + j));
-            }
-        }
-        return new LaunchPadCellGroup(this, cells);
+    wipe() {
+        this.cellMatrix.forEach(row => row.forEach(cell => this.launchPad.paintCell(cell, 0, 0)));
     }
 }
 export class LaunchPadCellGroup {
-    constructor(launchPad, cells) {
+    constructor(launchPad, cells, col, row, width, height) {
+        this.callbacks = {};
         this.parent = launchPad;
         this.cells = cells;
+        this.col = col;
+        this.row = row;
+        this.width = width;
+        this.height = height;
     }
     addEventListener(event, callback) {
-        this.cells.forEach(cell => cell.addEventListener(event, callback));
+        this.callbacks[event] = callback;
     }
-    paint(color) {
-        this.cells.forEach(cell => this.parent.paintCell(cell.col, cell.row, color));
+    executeCallbacks(event, index) {
+        let cell = this.cells[index];
+        if (this.callbacks[event]) {
+            this.callbacks[event](cell, index);
+        }
+    }
+    paint(color, mode = 0) {
+        this.cells.forEach(cell => cell.paint(color, mode));
+    }
+    cellAtIndex(index) {
+        console.log(this.cells);
+        return this.cells[index];
     }
 }
 class LaunchpadCell {
@@ -104,7 +166,9 @@ class LaunchpadCell {
             }
         }
     }
-    paint(color) {
-        this.parent.paintCell(this.col, this.row, color);
+    paint(color, mode = 0) {
+        this.color = color;
+        this.mode = mode;
+        this.parent.launchPad.paintCell(this, color, mode);
     }
 }

@@ -1,98 +1,186 @@
+type CellCoords = { col: number, row: number };
 export default class Launchpad {
-    cells: LaunchpadCell[] = []; 
-    cellsByNote: { [note: number]: LaunchpadCell } = {};
-    cellMatrix: LaunchpadCell[][] = [];
     midiInput: MIDIInput;
     midiOutput: MIDIOutput;
+    layers: any[];
+    currentLayerIndex: number;
 
     constructor(midiInput: MIDIInput, midiOutput: MIDIOutput) {
         this.midiInput = midiInput;
         this.midiOutput = midiOutput;
-        for (let y=0; y<10; y++) {
-            this.cellMatrix[y] = [];
-            for (let x=0; x<10; x++) {
-                let cell = new LaunchpadCell(this, x, y);
-                this.cellMatrix[y][x] = cell;
-                this.cells.push(cell);
-                this.cellsByNote[cell.note] = cell;
-            }
-        }
-        this.wipe();
-
         midiInput.addEventListener('midimessage', (event) => {
-            this.handleMidiInput(event.data);
+            this.handleMidiInput(event.data!);
         });
-        // console.log(this.cellMatrix);
+        this.layers = [];
+        this.currentLayerIndex = 0;
     }
 
-    wipe() {
-        this.cells.forEach(cell => this.paintCell(cell.col, cell.row, 0));
+    setLayer(index: number) {
+        this.currentLayerIndex = index;
+        let newLayer = this.layers[index];
+        if (newLayer) {
+            //newLayer.wipe();
+            newLayer.onChange();
+        } 
+    }
+
+    createLayer(layerInit: (layer: LaunchPadLayer) => void) {
+        let layer = new LaunchPadLayer(this);
+        layerInit(layer);
+        this.layers.push(layer);
     }
 
     getCell(col: number, row: number ) {
-        return this.cellMatrix[row][col];
+        return this.currentLayer().cellMatrix[row][col];
+    }
+
+    currentLayer() {
+        return this.layers[this.currentLayerIndex];
     }
 
     handleMidiInput(data: Uint8Array) {
         let status = data[0];
-        if (status === 0x90 && data[2] > 0) {
+        if ((status === 0x90 || status === 176) && data[2] > 0) {
             let note = data[1];
-            //highlightCell(note);
-            let cell = this.getCellFromNote(note);
-            cell.executeCallbacks('click');
-        } else if (status === 176 && data[2] > 0) {
-            let note = data[1];
-            //handleCCinput(data);
-            let cell = this.getCellFromNote(note);
-            cell.executeCallbacks('click');
+            let cellCoords: CellCoords = this.getCellFromNote(note);
+            this.onCellClick(cellCoords);
+        }
+    }
+
+    onCellClick(cellCoords: CellCoords) {
+        let currentLayer = this.layers[this.currentLayerIndex];
+        if (currentLayer) {
+            currentLayer.onCellClick(cellCoords);
         }
     }
 
     getCellFromNote(note: number) {
-        return this.cellsByNote[note];
+        let row = 9 - Math.floor(note / 10);
+        let col = note % 10 - 1;
+        return { col: col, row: row };
     }
 
-    gridIndexFromNote(midiNote: number) {
-        let row = 8 - Math.floor(midiNote / 10);
-        let col = midiNote % 10 - 1;
-        return row * 8 + col;
-    }
-
-    paintCell(col: number, row: number, color: number) {
-        let cell = this.getCell(col, row);
-        let channel = 0;
+    paintCell(cell: LaunchpadCell, color: number, mode=0) {
+        let channel = mode;
         let status = 0x90 + channel;
         let cellIndex = cell.note;
         this.midiOutput.send([status, cellIndex, color]);
     }
 
-    getCellGroup(col: number, row: number, width: number, height: number) {
+}
+
+export class LaunchPadLayer {
+    launchPad: Launchpad;
+
+    cellGroups: LaunchPadCellGroup[];
+    cellMatrix: LaunchpadCell[][];
+
+    constructor(launchPad: Launchpad) {
+        this.launchPad = launchPad;
+
+        this.cellMatrix = [];
+        this.cellGroups = [];
+        for (let y=0; y<10; y++) {
+            this.cellMatrix[y] = [];
+            for (let x=0; x<10; x++) {
+                let cell = new LaunchpadCell(this, x, y);
+                this.cellMatrix[y][x] = cell;
+            }
+        }
+    }
+
+    createCellGroup(col: number, row: number, width: number, height: number) {
         let cells = [];
-        for (let i=0; i<width; i++) {
-            for (let j=0; j<height; j++) {
-                // console.log("adding cell", col + i, row + j);
+        for (let j=0; j<height; j++) {
+            for (let i=0; i<width; i++) {
                 cells.push(this.getCell(col + i, row + j));
             }
         }
-        return new LaunchPadCellGroup(this, cells);
+        let cellGroup =  new LaunchPadCellGroup(this.launchPad, cells, col, row, width, height);
+        this.cellGroups.push(cellGroup);
+        return cellGroup;
+    }
+
+    // createCell(col: number, row: number) {
+    //     let cell = this.launchPad.getCell(col, row);
+    //     this.cells.push(cell);
+    //     return cell;
+    // }
+
+    onChange() {
+        this.wipe();
+        // iterate over the cells and paint them if they have a color
+        this.cellMatrix.forEach(row => row.forEach(cell => {
+            if (cell.color !== undefined) {
+                this.launchPad.paintCell(cell, cell.color, cell.mode);
+            }
+        }));
+    }
+
+    onCellClick(cellCoords: CellCoords) {
+        console.log('cell clicked', cellCoords);
+        // // find cellgroups that contain the cell
+        let cellGroups = this.cellGroups.filter(cellGroup => {
+            return cellCoords.col >= cellGroup.col && cellCoords.col < cellGroup.col + cellGroup.width &&
+                cellCoords.row >= cellGroup.row && cellCoords.row < cellGroup.row + cellGroup.height;
+        });
+        // // execute the click callback for each cellgroup with the index of the cell in the group
+        cellGroups.forEach(cellGroup => {
+            let index = (cellCoords.col - cellGroup.col) + (cellCoords.row - cellGroup.row) * cellGroup.width;
+            cellGroup.executeCallbacks('click', index);
+        });
+        // // execute the click callback
+        let cell = this.getCell(cellCoords.col, cellCoords.row);
+        cell.executeCallbacks('click');
+    }
+
+    getCell(col: number, row: number) {
+        return this.cellMatrix[row][col];
+    }
+
+    wipe() {
+        this.cellMatrix.forEach(row => row.forEach(cell => 
+            this.launchPad.paintCell(cell, 0, 0)
+        ));
     }
 }
 
 export class LaunchPadCellGroup {
     cells: LaunchpadCell[];
     parent: Launchpad;
+    col: number;
+    row: number;
+    width: number;
+    height: number;
+    callbacks: { [event: string]: (cell: LaunchpadCell, index: number) => void } = {};
 
-    constructor(launchPad: Launchpad, cells: LaunchpadCell[]) {
+    constructor(launchPad: Launchpad, cells: LaunchpadCell[], col: number, row: number, width: number, height: number) {
         this.parent = launchPad;
         this.cells = cells;
+        this.col = col;
+        this.row = row;
+        this.width = width;
+        this.height = height;
     }
 
-    addEventListener(event: string, callback: (cell: LaunchpadCell) => void) {
-        this.cells.forEach(cell => cell.addEventListener(event, callback));
+    addEventListener(event: string, callback: (cell: LaunchpadCell, index: number) => void) {
+        this.callbacks[event] = callback;
     }
 
-    paint(color: number) {
-        this.cells.forEach(cell => this.parent.paintCell(cell.col, cell.row, color));
+    executeCallbacks(event: string, index: number) {
+        let cell = this.cells[index];
+        if (this.callbacks[event]) {
+            this.callbacks[event](cell, index);
+        }
+    }
+
+    paint(color: number, mode=0) {
+        this.cells.forEach(cell => cell.paint(color, mode));
+    }
+
+    cellAtIndex(index: number) {
+        console.log(this.cells)
+        return this.cells[index];
     }
 }
 
@@ -101,9 +189,11 @@ class LaunchpadCell {
     note: number;
     col: number;
     row: number;
-    parent: Launchpad;
+    parent: LaunchPadLayer;
+    color: number|undefined;
+    mode: number|undefined;
 
-    constructor(parent: Launchpad, col: number, row: number) {
+    constructor(parent: LaunchPadLayer, col: number, row: number) {
         // console.log('creating cell', col, row);
         this.col = col;
         this.row = row;
@@ -129,7 +219,9 @@ class LaunchpadCell {
         }
     }
 
-    paint(color: number) {
-        this.parent.paintCell(this.col, this.row, color);
+    paint(color: number, mode=0) {
+        this.color = color;
+        this.mode = mode;
+        this.parent.launchPad.paintCell(this, color, mode);
     }
 }
